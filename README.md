@@ -32,6 +32,11 @@ Although it is currently tested on Mac OS X 10.15 and Ubuntu 16.04
 with Python 3.7 and PyTorch 1.5, it should generalize to other
 platforms and older PyTorch (perhaps ≥ v1.0) smoothly.
 
+However, Python ≤ 3.6 may be incompatible. Because type annotations
+are specified everywhere and the type annotation of self class is only
+supported by `__future__.annotations` in Python 3.7. If using Python
+3.6, this needs to use 'type string' instead.
+
 
 ## Installation
 
