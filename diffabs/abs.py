@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Tuple, List
+from typing import Tuple, List, Iterator
 
-from torch import Tensor
+from torch import Tensor, nn
 from torch.nn import functional as F
 
 from diffabs.utils import valid_lb_ub
@@ -45,7 +45,7 @@ class AbsEle(ABC):
         return cls.by_intvl(pt, pt)
 
     @abstractmethod
-    def __iter__(self) -> Tuple[Tensor, ...]:
+    def __iter__(self) -> Iterator[Tensor]:
         """ To register hooks in PyTorch, the arguments to forward() must be Tensor or tuple of Tensors, but not an
             AbsEle instance. To work around this, call *AbsEle to get a tuple of all information tensors as the
             arguments for forward(), and reconstruct AbsEle right after entering forward(). This requires the
@@ -222,3 +222,11 @@ class AbsBlackSheep(MetaFunc):
     """
     # TODO
     pass
+
+
+def forward_linear(layer: nn.Linear, e: AbsEle) -> AbsEle:
+    """ The linear layer computation is shared among all affine abstract domains. """
+    out = e.matmul(layer.weight.t())
+    if layer.bias is not None:
+        out += layer.bias
+    return out

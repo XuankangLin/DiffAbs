@@ -5,13 +5,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Tuple, Union, Iterator, Callable
 
 import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from diffabs.abs import AbsDom, AbsEle, AbsDist, AbsBlackSheep
+from diffabs.abs import AbsDom, AbsEle, AbsDist, AbsBlackSheep, forward_linear
 from diffabs.utils import valid_lb_ub, divide_pos_neg
 
 
@@ -37,8 +37,8 @@ class Ele(AbsEle):
     def by_intvl(cls, lb: Tensor, ub: Tensor) -> Ele:
         return Ele(lb, ub)
 
-    def __iter__(self) -> Tuple[Tensor, ...]:
-        return self._lb, self._ub
+    def __iter__(self) -> Iterator[Tensor]:
+        return iter((self._lb, self._ub))
 
     def __getitem__(self, key):
         return Ele(self._lb[key], self._ub[key])
@@ -263,18 +263,58 @@ class BlackSheep(AbsBlackSheep):
     pass
 
 
+# ===== Below are customized layers that can take and propagate abstract elements. =====
+
+
+class Linear(nn.Linear):
+    """ Linear layer with the ability to take approximations rather than concrete inputs. """
+    def __str__(self):
+        return f'{Dom.name}.' + super().__str__()
+
+    def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
+        """ Re-implement the forward computation by myself, because F.linear() may apply optimization using
+            torch.addmm() which requires inputs to be tensor.
+        :param ts: either Tensor, Ele, or Ele tensors
+        :rtype: corresponding to inputs, Tensor for Tensor, Ele for Ele, Ele tensors for Ele tensors
+        """
+        input_is_ele = True
+        if len(ts) == 1:
+            if isinstance(ts[0], Tensor):
+                return super().forward(ts[0])  # plain tensor, no abstraction
+            elif isinstance(ts[0], Ele):
+                e = ts[0]  # abstract element
+            else:
+                raise ValueError(f'Not supported argument type {type(ts[0])}.')
+        else:
+            input_is_ele = False
+            e = Ele(*ts)  # reconstruct abstract element
+
+        out = forward_linear(self, e)
+        return out if input_is_ele else tuple(out)
+    pass
+
+
 class Conv2d(nn.Conv2d):
     """ Convolutional layer with the ability to take in approximations rather than concrete inputs. """
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
 
-    def forward(self, *ts: Tensor) -> Union[Tensor, Tuple[Tensor, ...]]:
-        """ I have to implement the forward computation by myself, because F.conv2d() requires input to be Tensors. """
+    def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
+        """ I have to implement the forward computation by myself, because F.conv2d() requires input to be Tensors.
+        :param ts: either Tensor, Ele, or Ele tensors
+        :rtype: corresponding to inputs, Tensor for Tensor, Ele for Ele, Ele tensors for Ele tensors
+        """
+        input_is_ele = True
         if len(ts) == 1:
-            # plain tensor, no abstraction
-            return super().forward(ts[0])
-
-        e = Ele(*ts)  # reconstruct abstract element
+            if isinstance(ts[0], Tensor):
+                return super().forward(ts[0])  # plain tensor, no abstraction
+            elif isinstance(ts[0], Ele):
+                e = ts[0]  # abstract element
+            else:
+                raise ValueError(f'Not supported argument type {type(ts[0])}.')
+        else:
+            input_is_ele = False
+            e = Ele(*ts)  # reconstruct abstract element
 
         ''' See 'https://github.com/vdumoulin/conv_arithmetic' for animated illustrations.
             It's not hard to support them, but we just don't need that right now.
@@ -349,20 +389,35 @@ class Conv2d(nn.Conv2d):
 
         newl = newe._lb.permute(0, 3, 1, 2)  # Batch x OutC x OutH x OutW
         newu = newe._ub.permute(0, 3, 1, 2)
-        return newl, newu
+        out = Ele(newl, newu)
+        return out if input_is_ele else tuple(out)
     pass
+
+
+def _distribute_to_super(super_fn: Callable, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
+    """ Common pattern shared among different customized modules, applying original methods to the bounds. """
+    input_is_ele = True
+    if len(ts) == 1:
+        if isinstance(ts[0], Tensor):
+            return super_fn(ts[0])  # plain tensor, no abstraction
+        elif isinstance(ts[0], Ele):
+            e = ts[0]  # abstract element
+        else:
+            raise ValueError(f'Not supported argument type {type(ts[0])}.')
+    else:
+        input_is_ele = False
+        e = Ele(*ts)  # reconstruct abstract element
+
+    out_tuple = (super_fn(t) for t in iter(e))  # simply apply to both lower and upper bounds
+    return Ele(*out_tuple) if input_is_ele else out_tuple
 
 
 class ReLU(nn.ReLU):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
 
-    def forward(self, *ts: Tensor) -> Union[Tensor, Tuple[Tensor, ...]]:
-        if len(ts) == 1:
-            return super().forward(ts[0])
-
-        e = Ele(*ts)
-        return super().forward(e._lb), super().forward(e._ub)  # Simply apply to both lower and upper bounds
+    def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
+        return _distribute_to_super(super().forward, *ts)
     pass
 
 
@@ -370,12 +425,8 @@ class Tanh(nn.Tanh):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
 
-    def forward(self, *ts: Tensor) -> Union[Tensor, Tuple[Tensor, ...]]:
-        if len(ts) == 1:
-            return super().forward(ts[0])
-
-        e = Ele(*ts)
-        return super().forward(e._lb), super().forward(e._ub)  # Simply apply to both lower and upper bounds
+    def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
+        return _distribute_to_super(super().forward, *ts)
     pass
 
 
@@ -383,12 +434,8 @@ class MaxPool1d(nn.MaxPool1d):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
 
-    def forward(self, *ts: Tensor) -> Union[Tensor, Tuple[Tensor, ...]]:
-        if len(ts) == 1:
-            return super().forward(ts[0])
-
-        e = Ele(*ts)
-        return super().forward(e._lb), super().forward(e._ub)  # Simply apply to both lower and upper bounds
+    def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
+        return _distribute_to_super(super().forward, *ts)
     pass
 
 
@@ -396,10 +443,6 @@ class MaxPool2d(nn.MaxPool2d):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
 
-    def forward(self, *ts: Tensor) -> Union[Tensor, Tuple[Tensor, ...]]:
-        if len(ts) == 1:
-            return super().forward(ts[0])
-
-        e = Ele(*ts)
-        return super().forward(e._lb), super().forward(e._ub)  # Simply apply to both lower and upper bounds
+    def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
+        return _distribute_to_super(super().forward, *ts)
     pass
