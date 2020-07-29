@@ -58,6 +58,7 @@ directory and can be run using command
 ```
 pytest
 ```
+Note that `torchvision` is needed to run the tests for conv/maxpool layers.
 
 
 ## License
