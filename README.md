@@ -53,7 +53,7 @@ pip install diffabs
 
 ## Testing
 
-Test cases for individual abstract domains are under the `test/`
+Test cases for individual abstract domains are under the `tests/`
 directory and can be run using command
 ```
 pytest
