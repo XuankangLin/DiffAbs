@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Tuple, List, Iterator
+from typing import Tuple, List, Iterator, Union
 
 from torch import Tensor, nn
 from torch.nn import functional as F
@@ -179,7 +179,7 @@ class MetaFunc(object):
     # ===== Finally, some utility functions shared by different domains. =====
 
     @staticmethod
-    def _idxs_not(e: AbsEle, *idxs: int) -> List[int]:
+    def _idxs_not(e: Union[Tensor, AbsEle], *idxs: int) -> List[int]:
         """ Validate and get other column indices that are not specified. """
         col_size = e.size()[-1]
         assert len(idxs) > 0 and all([0 <= i < col_size for i in idxs])
