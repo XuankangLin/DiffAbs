@@ -445,6 +445,19 @@ class Linear(nn.Linear):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
 
+    @classmethod
+    def from_module(cls, src: nn.Linear) -> Linear:
+        with_bias = src.bias is not None
+        new_lin = Linear(src.in_features, src.out_features, with_bias)
+        new_lin.load_state_dict(src.state_dict())
+        return new_lin
+
+    def export(self) -> nn.Linear:
+        with_bias = self.bias is not None
+        lin = nn.Linear(self.in_features, self.out_features, with_bias)
+        lin.load_state_dict(self.state_dict())
+        return lin
+
     def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
         """
         :param ts: either Tensor, Ele, or Ele tensors
@@ -814,6 +827,9 @@ class ReLU(nn.ReLU):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
 
+    def export(self) -> nn.ReLU:
+        return nn.ReLU()
+
     def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
         """ According to paper, it approximates E by either of the two cases, whichever has smaller areas.
             Mathematically, it can be proved that the (linear) approximation is optimal in terms of approximated areas.
@@ -932,6 +948,9 @@ class ReLU(nn.ReLU):
 class Tanh(nn.Tanh):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
+
+    def export(self) -> nn.Tanh:
+        return nn.Tanh()
 
     def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
         """ For both LB' and UB', it chooses the smaller slope between LB-UB and LB'/UB'. Specifically,

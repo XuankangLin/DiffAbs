@@ -271,6 +271,19 @@ class Linear(nn.Linear):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
 
+    @classmethod
+    def from_module(cls, src: nn.Linear) -> Linear:
+        with_bias = src.bias is not None
+        new_lin = Linear(src.in_features, src.out_features, with_bias)
+        new_lin.load_state_dict(src.state_dict())
+        return new_lin
+
+    def export(self) -> nn.Linear:
+        with_bias = self.bias is not None
+        lin = nn.Linear(self.in_features, self.out_features, with_bias)
+        lin.load_state_dict(self.state_dict())
+        return lin
+
     def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
         """ Re-implement the forward computation by myself, because F.linear() may apply optimization using
             torch.addmm() which requires inputs to be tensor.
@@ -416,6 +429,9 @@ class ReLU(nn.ReLU):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
 
+    def export(self) -> nn.ReLU:
+        return nn.ReLU()
+
     def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
         return _distribute_to_super(super().forward, *ts)
     pass
@@ -424,6 +440,9 @@ class ReLU(nn.ReLU):
 class Tanh(nn.Tanh):
     def __str__(self):
         return f'{Dom.name}.' + super().__str__()
+
+    def export(self) -> nn.Tanh:
+        return nn.Tanh()
 
     def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
         return _distribute_to_super(super().forward, *ts)
