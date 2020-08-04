@@ -274,7 +274,7 @@ class Dist(AbsDist):
             Therefore, target_col.UB() - other_col.LB() should < 0, if not, that is the distance.
             As long as some of the others < 0, it's OK (i.e., min).
         """
-        others_idxs = self._idxs_not(*idxs)
+        others_idxs = self._idxs_not(e, *idxs)
         others_coef = e._lcoef[:, :, others_idxs]  # Batch x Dim0 x (Dim-|idxs|)
         others_cnst = e._lcnst[:, :, others_idxs]  # Batch x 1 x (Dim-|idxs|)
 
@@ -296,7 +296,7 @@ class Dist(AbsDist):
             Therefore, other_col.UB() - target_col.LB() should < 0, if not, that is the distance.
             All of the others should be accounted (i.e., max).
         """
-        others_idxs = self._idxs_not(*idxs)
+        others_idxs = self._idxs_not(e, *idxs)
         others_coef = e._ucoef[:, :, others_idxs]  # Batch x Dim0 x (Dim-|idxs|)
         others_cnst = e._ucnst[:, :, others_idxs]  # Batch x 1 x (Dim-|idxs|)
 
@@ -326,7 +326,7 @@ class Dist(AbsDist):
             Therefore, other_col.UB() - target_col.LB() should < 0, if not, that is the distance.
             As long as some of the others < 0, it's OK (i.e., min).
         """
-        others_idxs = self._idxs_not(*idxs)
+        others_idxs = self._idxs_not(e, *idxs)
         others_coef = e._ucoef[:, :, others_idxs]  # Batch x Dim0 x (Dim-|idxs|)
         others_cnst = e._ucnst[:, :, others_idxs]  # Batch x 1 x (Dim-|idxs|)
 
@@ -348,7 +348,7 @@ class Dist(AbsDist):
             columns' LB and apply to CrossEntropy style loss. However, that way it may lose information of the relation
             between two specific columns (using approximated LBs but not UB_i - LB_j).
         """
-        others_idxs = self._idxs_not(*idxs)
+        others_idxs = self._idxs_not(e, *idxs)
         others_coef = e._lcoef[:, :, others_idxs]  # Batch x Dim0 x (Dim-|idxs|)
         others_cnst = e._lcnst[:, :, others_idxs]  # Batch x 1 x (Dim-|idxs|)
 

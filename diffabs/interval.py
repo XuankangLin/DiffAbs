@@ -127,7 +127,7 @@ class Dist(AbsDist):
             Therefore, target_col.UB() - other_col.LB() should < 0, if not, that is the distance.
             As long as some of the others < 0, it's OK (i.e., min).
         """
-        others = self._idxs_not(*idxs)
+        others = self._idxs_not(e, *idxs)
         others = e.lb()[..., others]
 
         res = []
@@ -144,7 +144,7 @@ class Dist(AbsDist):
             Therefore, other_col.UB() - target_col.LB() should < 0, if not, that is the distance.
             All of the others should be accounted (i.e., max).
         """
-        others = self._idxs_not(*idxs)
+        others = self._idxs_not(e, *idxs)
         others = e.ub()[..., others]
 
         res = []
@@ -169,7 +169,7 @@ class Dist(AbsDist):
             Therefore, other_col.UB() - target_col.LB() should < 0, if not, that is the distance.
             As long as some of the others < 0, it's OK (i.e., min).
         """
-        others = self._idxs_not(*idxs)
+        others = self._idxs_not(e, *idxs)
         others = e.ub()[..., others]
 
         res = []
@@ -186,7 +186,7 @@ class Dist(AbsDist):
             Therefore, target_col.UB() - other_col.LB() should < 0, if not, that is the distance.
             All of the others should be accounted (i.e., max).
         """
-        others = self._idxs_not(*idxs)
+        others = self._idxs_not(e, *idxs)
         others = e.lb()[..., others]
 
         res = []
