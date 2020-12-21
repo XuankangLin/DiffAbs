@@ -5,6 +5,7 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from diffabs.abs import MetaFunc
+from diffabs.utils import reduce_dim_dists
 
 
 class ConcDist(MetaFunc):
@@ -26,6 +27,20 @@ class ConcDist(MetaFunc):
         threshold = (threshold - mean) / range
         d = threshold - t
         return F.relu(d)
+
+    @classmethod
+    def bound_by(cls, outs: Tensor, lb: Tensor, ub: Tensor, reduce_by: str):
+        dist_lb = F.relu(lb - outs)  # like col_ge_val
+        dist_ub = F.relu(outs - ub)  # like col_le_val
+        dists = torch.cat((dist_lb, dist_ub), dim=-1)
+        return reduce_dim_dists(dists, reduce_by)
+
+    @classmethod
+    def not_bound_by(cls, outs: Tensor, lb: Tensor, ub: Tensor, reduce_by: str):
+        dist_lb = F.relu(outs - lb)  # like col_le_val
+        dist_ub = F.relu(ub - outs)  # like col_ge_val
+        dists = torch.cat((dist_lb, dist_ub), dim=-1)
+        return reduce_dim_dists(dists, reduce_by)
 
     @classmethod
     def cols_not_max(cls, outs: Tensor, *idxs: int) -> Tensor:

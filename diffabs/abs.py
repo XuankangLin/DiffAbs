@@ -5,10 +5,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Iterator, Union
 
+import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from diffabs.utils import valid_lb_ub
+from diffabs.utils import valid_lb_ub, reduce_dim_dists
 
 
 class AbsDom(ABC):
@@ -148,6 +149,20 @@ class MetaFunc(object):
         """
         raise NotImplementedError()
 
+    def bound_by(self, e: AbsEle, lb: Tensor, ub: Tensor, reduce_by: str):
+        """ Property: all dimensions bounded by [LB, UB].
+        :param lb/ub: batched, shape 1 x ...
+        :param reduce_by: 'max' or 'sum'
+        """
+        raise NotImplementedError()
+
+    def not_bound_by(self, e: AbsEle, lb: Tensor, ub: Tensor, reduce_by: str):
+        """ Property: not all dimensions bounded by [LB, UB].
+        :param lb/ub: batched, shape 1 x ...
+        :param reduce_by: 'max' or 'sum'
+        """
+        raise NotImplementedError()
+
     def cols_not_max(self, e: AbsEle, *idxs: int):
         """ Property: Forall idx-th column value is not maximal among all. """
         raise NotImplementedError()
@@ -212,6 +227,20 @@ class AbsDist(MetaFunc):
         threshold = (threshold - mean) / range
         d = threshold - t
         return F.relu(d)
+
+    def bound_by(self, e: AbsEle, lb: Tensor, ub: Tensor, reduce_by: str):
+        e_lb, e_ub = e.gamma()
+        dist_lb = F.relu(lb - e_lb)  # like col_ge_val
+        dist_ub = F.relu(e_ub - ub)  # like col_le_val
+        dists = torch.cat((dist_lb, dist_ub), dim=-1)
+        return reduce_dim_dists(dists, reduce_by)
+
+    def not_bound_by(self, e: AbsEle, lb: Tensor, ub: Tensor, reduce_by: str):
+        e_lb, e_ub = e.gamma()
+        dist_lb = F.relu(e_lb - lb)  # like col_le_val
+        dist_ub = F.relu(ub - e_ub)  # like col_ge_val
+        dists = torch.cat((dist_lb, dist_ub), dim=-1)
+        return reduce_dim_dists(dists, reduce_by)
     pass
 
 

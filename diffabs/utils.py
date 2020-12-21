@@ -28,6 +28,18 @@ def divide_pos_neg(ws: Tensor) -> Tuple[Tensor, Tensor]:
     return pos_weights, neg_weights
 
 
+def reduce_dim_dists(dists: Tensor, reduce_by: str) -> Tensor:
+    """
+    :param reduce_by: 'max' or 'sum'
+    """
+    if reduce_by == 'sum':
+        return dists.sum(dim=-1)
+    elif reduce_by == 'max':
+        return dists.max(dim=-1)[0]  # max() returns value, index
+    else:
+        raise ValueError(f'unrecognized reduce_by {reduce_by}')
+
+
 class AbsData(Dataset):
     """ Storing the split LB/UB boxes/abstractions. """
     def __init__(self, boxes_lb: Tensor, boxes_ub: Tensor, boxes_extra: Tensor = None):
