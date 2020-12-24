@@ -1,9 +1,4 @@
-import sys
-from pathlib import Path
-
 import torch
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from diffabs.interval import Dom
 from tests import common
@@ -105,3 +100,7 @@ def test_maxpool2d_degen():
 
 def test_conv_degen():
     return common.conv_degen(Dom())
+
+
+def test_clamp():
+    return common.clamp(Dom())

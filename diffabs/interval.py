@@ -465,3 +465,19 @@ class MaxPool2d(nn.MaxPool2d):
     def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
         return _distribute_to_super(super().forward, *ts)
     pass
+
+
+class Clamp(nn.Module):
+    def __init__(self, min: float, max: float):
+        super().__init__()
+        self.min = min
+        self.max = max
+        return
+
+    def __str__(self):
+        return f'{Dom.name}.Clamp({self.min}, {self.max})'
+
+    def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
+        fn = lambda x: torch.clamp(x, self.min, self.max)
+        return _distribute_to_super(fn, *ts)
+    pass

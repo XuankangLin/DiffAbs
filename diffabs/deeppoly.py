@@ -692,42 +692,55 @@ class Conv2d(nn.Conv2d):
     pass
 
 
-def clamp(e: Ele, ch_val_mins: Tensor, ch_val_maxs: Tensor) -> Ele:
+class Clamp(nn.Module):
     """ Basically a generalized version of ReLU, clamp() for an abstract element may also be over-approximated.
         Note that now there are two bars, to maintain the validity of LB<=UB, both may be over-approximated.
     """
-    assert e._lcoef.shape[1] == 1  # only for brightness robustness for now, just 1 commons eps to depend on
-    assert ch_val_mins.dim() == 1 and len(ch_val_mins) in [1, 3]
-    assert ch_val_maxs.dim() == 1 and len(ch_val_maxs) in [1, 3]
+    def __init__(self, min: float, max: float):
+        super().__init__()
+        self.min = min
+        self.max = max
+        return
 
-    lbs, ubs = e.gamma()  # Batch x Dims...
+    def __str__(self):
+        return f'{Dom.name}.Clamp({self.min}, {self.max})'
 
-    full_lb_coefs = e._lcoef
-    full_lb_cnsts = e._lcnst
-    full_ub_coefs = e._ucoef
-    full_ub_cnsts = e._ucnst
-    coef_zeros = torch.zeros_like(e._lcoef)
-    cnst_zeros = torch.zeros_like(e._lcnst)
+    def forward(self, *ts: Union[Tensor, Ele]) -> Union[Tensor, Ele, Tuple[Tensor, ...]]:
+        input_is_ele = True
+        if len(ts) == 1:
+            if isinstance(ts[0], Tensor):
+                return torch.clamp(ts[0], self.min, self.max)  # plain tensor, no abstraction
+            elif isinstance(ts[0], Ele):
+                e = ts[0]  # abstract element
+            else:
+                raise ValueError(f'Not supported argument type {type(ts[0])}.')
+        else:
+            input_is_ele = False
+            e = Ele(*ts)  # reconstruct abstract element
 
-    # now that it may provide different min/max for different channel, I have to enumerate multiple times
-    channels = e.size()[1]
-    for c in range(channels):
-        c_filter = torch.zeros_like(lbs, dtype=torch.uint8)
-        c_filter[:, c, :, :] = 1  # B x C x H x W
+        val_min = self.min  # type: float
+        val_max = self.max  # type: float
 
-        val_min = ch_val_mins[c]
-        val_max = ch_val_maxs[c]
+        lbs, ubs = e.gamma()  # Batch x Dims...
 
-        both_le_min = c_filter & (ubs <= val_min)
-        both_ge_max = c_filter & (lbs >= val_max)
-        both_valid = c_filter & (lbs >= val_min) & (ubs <= val_max)
-        the_rest = c_filter & (~ (both_le_min | both_ge_max | both_valid))
+        full_lb_coefs = e._lcoef
+        full_lb_cnsts = e._lcnst
+        full_ub_coefs = e._ucoef
+        full_ub_cnsts = e._ucnst
+        coef_zeros = torch.zeros_like(e._lcoef)
+        cnst_zeros = torch.zeros_like(e._lcnst)
 
-        lb_min_ub_max = c_filter & the_rest & ((lbs <= val_min) & (ubs <= val_max))
-        min_lb_max_ub = c_filter & the_rest & ((lbs >= val_min) & (ubs >= val_max))
-        lb_min_max_ub = c_filter & the_rest & ((lbs <= val_min) & (ubs >= val_max))
+        both_le_min = ubs <= val_min
+        both_ge_max = lbs >= val_max
+        both_valid = (lbs >= val_min) & (ubs <= val_max)
+        the_rest = ~ (both_le_min | both_ge_max | both_valid)
 
-        assert (c_filter == both_le_min | both_ge_max | both_valid | lb_min_ub_max | min_lb_max_ub | lb_min_max_ub).all()
+        # basically putting lb/ub into two of the three holes in <_, min, _, max, _>
+        lb_min_ub_max = the_rest & ((lbs <= val_min) & (ubs <= val_max))
+        min_lb_max_ub = the_rest & ((lbs >= val_min) & (ubs >= val_max))
+        lb_min_max_ub = the_rest & ((lbs <= val_min) & (ubs >= val_max))
+
+        assert (both_le_min | both_ge_max | both_valid | lb_min_ub_max | min_lb_max_ub | lb_min_max_ub).all()
 
         # old index was for concrete outputs, need  to unsqueeze to fit both coefs and cnsts
         both_le_min = both_le_min.unsqueeze(dim=1)
@@ -759,7 +772,12 @@ def clamp(e: Ele, ch_val_mins: Tensor, ch_val_maxs: Tensor) -> Ele:
         full_ub_coefs = torch.where(both_ge_max, tmp_ub_coefs, full_ub_coefs)
         full_ub_cnsts = torch.where(both_ge_max, tmp_ub_cnsts, full_ub_cnsts)
 
+        # both_valid need no change
+
         def _case_lb_min_ub_max() -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+            """ New UB' line:
+                    y = (U-min)/(U-L) x + U(min - L)/(U-L)
+            """
             new_lb_coef = coef_zeros
             new_lb_cnst = cnst_zeros + val_min
 
@@ -772,7 +790,6 @@ def clamp(e: Ele, ch_val_mins: Tensor, ch_val_maxs: Tensor) -> Ele:
 
             ub_k = ub_k.unsqueeze(dim=1)  # then it will fit both coefs and cnsts
             ub_b = ub_b.unsqueeze(dim=1)
-            assert ub_k.shape == ub_b.shape == e._ucoef.shape == e._ucnst.shape
             new_ub_coef = e._ucoef * ub_k
             new_ub_cnst = e._ucnst * ub_k + ub_b
             return new_lb_coef, new_lb_cnst, new_ub_coef, new_ub_cnst
@@ -784,6 +801,9 @@ def clamp(e: Ele, ch_val_mins: Tensor, ch_val_maxs: Tensor) -> Ele:
         full_ub_cnsts = torch.where(lb_min_ub_max, tmp_ub_cnsts, full_ub_cnsts)
 
         def _case_min_lb_max_ub() -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+            """ New LB' line:
+                    y = (max-L)/(U-L) x + L(U-max)/(U-L)
+            """
             new_ub_coef = coef_zeros
             new_ub_cnst = cnst_zeros + val_max
 
@@ -796,7 +816,6 @@ def clamp(e: Ele, ch_val_mins: Tensor, ch_val_maxs: Tensor) -> Ele:
 
             lb_k = lb_k.unsqueeze(dim=1)  # then it will fit both coefs and cnsts
             lb_b = lb_b.unsqueeze(dim=1)
-            assert lb_k.shape == lb_b.shape == e._lcoef.shape == e._lcnst.shape
             new_lb_coef = e._lcoef * lb_k
             new_lb_cnst = e._lcnst * lb_k + lb_b
             return new_lb_coef, new_lb_cnst, new_ub_coef, new_ub_cnst
@@ -820,7 +839,9 @@ def clamp(e: Ele, ch_val_mins: Tensor, ch_val_maxs: Tensor) -> Ele:
         full_ub_coefs = torch.where(lb_min_max_ub, tmp_ub_coefs, full_ub_coefs)
         full_ub_cnsts = torch.where(lb_min_max_ub, tmp_ub_cnsts, full_ub_cnsts)
 
-    return Ele(full_lb_coefs, full_lb_cnsts, full_ub_coefs, full_ub_cnsts, e.dlb, e.dub)
+        out = Ele(full_lb_coefs, full_lb_cnsts, full_ub_coefs, full_ub_cnsts, e.dlb, e.dub)
+        return out if input_is_ele else tuple(out)
+    pass
 
 
 class ReLU(nn.ReLU):

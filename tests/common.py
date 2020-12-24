@@ -1,7 +1,6 @@
 """ Some tests should be implemented for each abstract domain. """
 
 import random
-import sys
 from pathlib import Path
 
 import torch
@@ -10,8 +9,6 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.utils import data
 from torchvision import transforms
-
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from diffabs.abs import AbsDom
 
@@ -346,3 +343,25 @@ def optimizable(dom: AbsDom, batch_size: int = 4, in_features: int = 2, out_feat
         print('Outputs UB:', outs.ub())
         assert (outs.lb()[:, 0] >= 0.).all()
     return retrained
+
+
+def clamp(dom: AbsDom, ntimes: int = 10, batch_size: int = 10):
+    min, max = -.5, .5
+    c = dom.Clamp(min, max)
+
+    for _ in range(ntimes):
+        # test concrete cases
+        x = torch.randn(batch_size, batch_size, device=device)
+        assert torch.allclose(c(x), torch.clamp(x, min, max))
+
+        # test abstract cases
+        t1t2 = torch.stack((torch.randn(batch_size, batch_size, device=device),
+                            torch.randn(batch_size, batch_size, device=device)), dim=-1)
+        lb, _ = torch.min(t1t2, dim=-1)
+        ub, _ = torch.max(t1t2, dim=-1)
+        e = dom.Ele.by_intvl(lb, ub)
+        outs_lb, outs_ub = c(e).gamma()
+
+        assert (min <= outs_lb).all() and (outs_lb <= max).all()
+        assert (min <= outs_ub).all() and (outs_ub <= max).all()
+    return
