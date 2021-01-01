@@ -43,11 +43,17 @@ class Ele(AbsEle):
     def __getitem__(self, key):
         return Ele(self._lb[key], self._ub[key])
 
+    def __len__(self) -> int:
+        return len(self._lb)
+
     def size(self):
         return self._lb.size()
 
     def dim(self):
         return self._lb.dim()
+
+    def device(self):
+        return self._lb.device
 
     def lb(self) -> Tensor:
         return self._lb

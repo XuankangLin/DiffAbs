@@ -59,6 +59,11 @@ class AbsEle(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def __len__(self) -> int:
+        """ Return number of abstractions in this batch (assume batched). """
+        raise NotImplementedError()
+
+    @abstractmethod
     def size(self):
         """ Return the size of any concretized data point from this abstract element. """
         raise NotImplementedError()
@@ -66,6 +71,11 @@ class AbsEle(ABC):
     @abstractmethod
     def dim(self):
         """ Return the number of dimensions for any concretized data point from this abstract element. """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def device(self):
+        """ Return the device used by all the actual tensors of this abstraction. """
         raise NotImplementedError()
 
     @abstractmethod

@@ -81,11 +81,17 @@ class Ele(AbsEle):
     def __getitem__(self, key):
         return Ele(self._lcoef[key], self._lcnst[key], self._ucoef[key], self._ucnst[key], self.dlb[key], self.dub[key])
 
+    def __len__(self) -> int:
+        return len(self._lcoef)
+
     def size(self):
         return self._lcnst.squeeze(dim=1).size()
 
     def dim(self):
         return self._lcnst.squeeze(dim=1).dim()
+
+    def device(self):
+        return self._lcoef.device
 
     @staticmethod
     def lb_of(coefs: Tensor, cnsts: Tensor, dlb: Tensor, dub: Tensor) -> Tensor:
