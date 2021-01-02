@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple, Union, Iterator, Callable
+from typing import Tuple, Union, Iterator, Callable, Iterable
 
 import torch
 from torch import Tensor, nn
@@ -117,6 +117,12 @@ class Ele(AbsEle):
     def __rmul__(self, flt) -> Ele:
         return self.__mul__(flt)
     pass
+
+
+def cat0(es: Iterable[Ele]) -> Ele:
+    new_lb = torch.cat([e._lb for e in es], dim=0)
+    new_ub = torch.cat([e._ub for e in es], dim=0)
+    return Ele(new_lb, new_ub)
 
 
 class Dist(AbsDist):
